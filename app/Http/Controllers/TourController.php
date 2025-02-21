@@ -2,70 +2,53 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\TourRequest\TourIndexRequest;
+use App\Http\Requests\TourRequest\TourStoreRequest;
+use App\Http\Requests\TourRequest\TourUpdateRequest;
+use App\Http\Resources\TourCollection;
+use App\Http\Resources\TourResource;
 use App\Models\Tour;
-use Illuminate\Http\Request;
+use App\Services\TourService;
 
 class TourController extends Controller
 {
-    public function index(Request $request)
+    private TourService $tourService;
+
+    public function __construct(TourService $tourService)
     {
-        $query = Tour::query();
-
-        if ($request->has('min_price')) {
-            $query->where('price', '>=', $request->min_price);
-        }
-
-        if ($request->has('max_price')) {
-            $query->where('price', '<=', $request->max_price);
-        }
-
-        if ($request->has('start_date')) {
-            $query->where('start_date', '>=', $request->start_date);
-        }
-
-        if ($request->has('end_date')) {
-            $query->where('end_date', '<=', $request->end_date);
-        }
-
-        return response()->json($query->get(), 200);
+        $this->tourService = $tourService;
     }
 
-    public function store(Request $request)
+    public function index(TourIndexRequest $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'price' => 'required|numeric',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
-        ]);
+        $tours = $this->tourService->getTours($request);
+        return new TourCollection($tours);
+    }
 
-        $tour = Tour::create($validatedData);
-        return response()->json($tour, 201);
+    public function store(TourStoreRequest $request)
+    {
+        $validatedData = $request->validated();
+        $tour = $this->tourService->createTour($validatedData);
+
+        return new TourResource($tour);
     }
 
     public function show(Tour $tour)
     {
-        return response()->json($tour, 200);
+        return new TourResource($tour);
     }
 
-    public function update(Request $request, Tour $tour)
+    public function update(TourUpdateRequest $request, Tour $tour)
     {
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string',
-            'price' => 'sometimes|numeric',
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after_or_equal:start_date',
-        ]);
+        $validatedData = $request->validated();
+        $updatedTour = $this->tourService->updateTour($tour, $validatedData);
 
-        $tour->update($validatedData);
-        return response()->json($tour, 200);
+        return new TourResource($updatedTour);
     }
 
     public function destroy(Tour $tour)
     {
-        $tour->delete();
+        $this->tourService->deleteTour($tour);
         return response()->json(null, 204);
     }
 }

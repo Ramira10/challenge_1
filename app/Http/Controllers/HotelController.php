@@ -2,70 +2,53 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\HotelRequest\HotelIndexRequest;
+use App\Http\Requests\HotelRequest\HotelStoreRequest;
+use App\Http\Requests\HotelRequest\HotelUpdateRequest;
+use App\Http\Resources\HotelCollection;
+use App\Http\Resources\HotelResource;
 use App\Models\Hotel;
-use Illuminate\Http\Request;
+use App\Services\HotelService;
 
 class HotelController extends Controller
 {
-    public function index(Request $request)
+    private HotelService $hotelService;
+
+    public function __construct(HotelService $hotelService)
     {
-        $query = Hotel::query();
-
-        if ($request->has('min_rating')) {
-            $query->where('rating', '>=', $request->min_rating);
-        }
-
-        if ($request->has('max_rating')) {
-            $query->where('rating', '<=', $request->max_rating);
-        }
-
-        if ($request->has('min_price')) {
-            $query->where('price_per_night', '>=', $request->min_price);
-        }
-
-        if ($request->has('max_price')) {
-            $query->where('price_per_night', '<=', $request->max_price);
-        }
-
-        return response()->json($query->get(), 200);
+        $this->hotelService = $hotelService;
     }
 
-    public function store(Request $request)
+    public function index(HotelIndexRequest $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'address' => 'required|string',
-            'rating' => 'required|integer',
-            'price_per_night' => 'required|numeric',
-        ]);
+        $hotels = $this->hotelService->getHotels($request);
+        return new HotelCollection($hotels);
+    }
 
-        $hotel = Hotel::create($validatedData);
-        return response()->json($hotel, 201);
+    public function store(HotelStoreRequest $request)
+    {
+        $validatedData = $request->validated();
+        $hotel = $this->hotelService->createHotel($validatedData);
+
+        return new HotelResource($hotel);
     }
 
     public function show(Hotel $hotel)
     {
-        return response()->json($hotel, 200);
+        return new HotelResource($hotel);
     }
 
-    public function update(Request $request, Hotel $hotel)
+    public function update(HotelUpdateRequest $request, Hotel $hotel)
     {
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string',
-            'address' => 'sometimes|string',
-            'rating' => 'sometimes|integer',
-            'price_per_night' => 'sometimes|numeric',
-        ]);
+        $validatedData = $request->validated();
+        $updatedHotel = $this->hotelService->updateHotel($hotel, $validatedData);
 
-        $hotel->update($validatedData);
-        return response()->json($hotel, 200);
+        return new HotelResource($updatedHotel);
     }
 
     public function destroy(Hotel $hotel)
     {
-        $hotel->delete();
+        $this->hotelService->deleteHotel($hotel);
         return response()->json(null, 204);
     }
 }

@@ -2,71 +2,79 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\BookingRequest\BookingIndexRequest;
+use App\Http\Requests\BookingRequest\BookingStoreRequest;
+use App\Http\Requests\BookingRequest\BookingUpdateRequest;
+use App\Http\Resources\BookingCollection;
+use App\Http\Resources\BookingResource;
 use App\Models\Booking;
-use Illuminate\Http\Request;
+use App\Services\BookingService;
+use App\Exports\BookingsExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class BookingController extends Controller
 {
-    public function index(Request $request)
+    private BookingService $bookingService;
+
+    public function __construct(BookingService $bookingService)
     {
-        $query = Booking::query();
-
-        if ($request->has('start_date')) {
-            $query->where('booking_date', '>=', $request->start_date);
-        }
-
-        if ($request->has('end_date')) {
-            $query->where('booking_date', '<=', $request->end_date);
-        }
-
-        $bookings = $query->get();
-
-        foreach ($bookings as $booking) {
-            $booking->tour;
-            $booking->hotel;
-        }
-
-        return response()->json($bookings, 200);
+        $this->bookingService = $bookingService;
     }
 
-    public function store(Request $request)
+    public function index(BookingIndexRequest $request)
     {
-        $validatedData = $request->validate([
-            'tour_id' => 'required|exists:tours,id',
-            'hotel_id' => 'required|exists:hotels,id',
-            'customer_name' => 'required|string|max:255',
-            'customer_email' => 'required|email|max:255',
-            'number_of_people' => 'required|integer|min:1',
-            'booking_date' => 'required|date',
-        ]);
+        $bookings = $this->bookingService->getBookings($request);
+        return new BookingCollection($bookings);
+    }
 
-        $booking = Booking::create($validatedData);
-        return response()->json($booking, 201);
+    public function store(BookingStoreRequest $request)
+    {
+        $validatedData = $request->validated();
+        $booking = $this->bookingService->createBooking($validatedData);
+        return new BookingResource($booking);
     }
 
     public function show(Booking $booking)
     {
-        return response()->json($booking, 200);
+        $booking = $this->bookingService->getBooking($booking);
+        return new BookingResource($booking);
     }
 
-    public function update(Request $request, Booking $booking)
+    public function update(BookingUpdateRequest $request, Booking $booking)
     {
-        $validatedData = $request->validate([
-            'tour_id' => 'sometimes|exists:tours,id',
-            'hotel_id' => 'sometimes|exists:hotels,id',
-            'customer_name' => 'sometimes|string|max:255',
-            'customer_email' => 'sometimes|email|max:255',
-            'number_of_people' => 'sometimes|integer|min:1',
-            'booking_date' => 'sometimes|date',
-        ]);
-
-        $booking->update($validatedData);
-        return response()->json($booking, 200);
+        $validatedData = $request->validated();
+        $booking = $this->bookingService->updateBooking($booking, $validatedData);
+        return new BookingResource($booking);
     }
 
     public function destroy(Booking $booking)
     {
-        $booking->delete();
-        return response()->json(null, 204);
+        $this->bookingService->deleteBooking($booking);
+
+        return response()->json([
+            'message' => 'Booking successfully deleted',
+            'data' => new BookingResource($booking)
+        ]);
+    }
+
+    public function export()
+    {
+        return Excel::download(new BookingsExport, 'bookings.csv');
+    }
+
+    public function cancel(Booking $booking)
+    {
+        $updatedBooking = $this->bookingService->cancelBooking($booking);
+
+        if ($updatedBooking) {
+            return response()->json([
+                'message' => 'Booking successfully cancelled',
+                'data' => new BookingResource($updatedBooking)
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Booking is already cancelled',
+        ], 400);
     }
 }
